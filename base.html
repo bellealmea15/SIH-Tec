@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sistema de Horários{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+    <script src="https://unpkg.com/feather-icons"></script>
+</head>
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>SIHTEC</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
+                    <i data-feather="grid"></i><span>Dashboard</span>
+                </a>
+                <a href="{{ url_for('gerenciar_professores') }}" class="nav-link {% if 'professores' in request.endpoint %}active{% endif %}">
+                    <i data-feather="users"></i><span>Professores</span>
+                </a>
+                <a href="{{ url_for('gerenciar_disciplinas') }}" class="nav-link {% if 'disciplinas' in request.endpoint %}active{% endif %}">
+                    <i data-feather="book-open"></i><span>Disciplinas</span>
+                </a>
+                <a href="{{ url_for('gerenciar_disponibilidade') }}" class="nav-link {% if 'disponibilidade' in request.endpoint %}active{% endif %}">
+                    <i data-feather="calendar"></i><span>Disponibilidade</span>
+                </a>
+                {% if current_user.is_admin() %}
+                <a href="{{ url_for('gerenciar_usuarios') }}" class="nav-link {% if 'usuarios' in request.endpoint %}active{% endif %}">
+                    <i data-feather="shield"></i><span>Gestão de Usuários</span>
+                </a>
+                {% endif %}
+            </nav>
+        </aside>
+
+        <div class="main-content">
+            <header class="main-header">
+                <div class="header-title">
+                    <h1>{% block page_title %}{% endblock %}</h1>
+                </div>
+                <div class="user-menu">
+                    <div class="theme-switcher" id="theme-toggle" title="Alternar Tema">
+                        <i data-feather="sun" class="sun-icon"></i>
+                        <i data-feather="moon" class="moon-icon"></i>
+                    </div>
+                    <div class="user-info">
+                        <span>{{ current_user.username }}</span>
+                        <small>{{ current_user.role|capitalize }}</small>
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="logout-btn" title="Sair">
+                        <i data-feather="log-out"></i>
+                    </a>
+                </div>
+            </header>
+            <main class="content-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        feather.replace(); // Ativa os ícones
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
