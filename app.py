@@ -524,5 +524,6 @@ def gerar_melhores_horarios(num_tentativas=50):
     # A função original já retornava 'success', vamos mantê-la simples
     return {'horarios': horarios_gerados[:10]}
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
