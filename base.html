@@ -11,7 +11,9 @@
     <div class="app-container">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>SIHTEC</h2>
+              {% load static %}
+               <h2>
+                 <img src="{% static 'images/logo.jpg' %}" alt="logo" style="height: 24px; vertical-align: middle; margin-right: 8px;"> SIH TEC</h2>
             </div>
             <nav class="sidebar-nav">
                 <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
@@ -30,7 +32,7 @@
                 <a href="{{ url_for('gerenciar_usuarios') }}" class="nav-link {% if 'usuarios' in request.endpoint %}active{% endif %}">
                     <i data-feather="shield"></i><span>Gestão de Usuários</span>
                 </a>
-                {% endif %}
+                {% endif %} 
             </nav>
         </aside>
 
