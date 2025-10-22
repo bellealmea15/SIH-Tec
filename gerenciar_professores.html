@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Gestão de Professores{% endblock %}
+{% block page_title %}Gestão de Professores{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Professores Cadastrados</h2>
+        <div class="header-actions">
+            <form method="GET" action="{{ url_for('gerenciar_professores') }}" class="search-bar">
+                <input type="search" name="q" placeholder="Pesquisar professor..." value="{{ search_query or '' }}">
+            </form>
+            <button class="btn-principal" onclick="openAddModal()"><i data-feather="plus"></i> Adicionar Professor</button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="searchable-table">
+            <thead>
+                <tr>
+                    <th>Nome do Professor</th>
+                    <th class="actions-column">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for professor in professores %}
+                <tr>
+                    <td>{{ professor.nome }}</td>
+                    <td class="actions-column">
+                        <button class="btn-icon" title="Editar" onclick="openEditModal('{{ professor.id }}', '{{ professor.nome }}')"><i data-feather="edit"></i></button>
+                        <form action="{{ url_for('remover_professor', id=professor.id) }}" method="POST" onsubmit="return confirm('Tem certeza que deseja remover este professor?');">
+                            <button type="submit" class="btn-icon btn-danger" title="Remover"><i data-feather="trash-2"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2">Nenhum professor encontrado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="addModal" class="modal">
+    <div class="modal-content">
+        <span class="close-button" onclick="closeAddModal()">&times;</span>
+        <h2>Adicionar Novo Professor</h2>
+        <form action="{{ url_for('adicionar_professor') }}" method="POST" class="form-vertical">
+            <div class="input-group">
+                <label for="nome">Nome completo do professor</label>
+                <input type="text" id="nome" name="nome" required>
+            </div>
+            <button type="submit" class="btn-principal">Salvar Professor</button>
+        </form>
+    </div>
+</div>
+
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <span class="close-button" onclick="closeEditModal()">&times;</span>
+        <h2>Editar Professor</h2>
+        <form id="editForm" method="POST" class="form-vertical">
+            <div class="input-group">
+                <label for="editNome">Nome completo do professor</label>
+                <input type="text" id="editNome" name="nome" required>
+            </div>
+            <button type="submit" class="btn-principal">Salvar Alterações</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

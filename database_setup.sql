@@ -1,4 +1,5 @@
 
+
 DROP TABLE IF EXISTS disponibilidade;
 DROP TABLE IF EXISTS disciplinas;
 DROP TABLE IF EXISTS professores;
