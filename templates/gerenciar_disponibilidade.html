@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Gestão de Disponibilidade{% endblock %}
+{% block page_title %}Gestão de Disponibilidade{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Selecione um Professor</h2>
+    </div>
+    <p class="card-subtitle">Escolha um professor para visualizar e editar sua grade de disponibilidade para o período noturno. As alterações são salvas automaticamente ao clicar.</p>
+    <select id="professor-select">
+        <option value="">-- Selecione um professor da lista --</option>
+        {% for professor in professores %}
+        <option value="{{ professor.id }}">{{ professor.nome }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<div class="card" id="availability-grid-card" style="display: none;">
+    <h2 id="grid-title">Grade de Disponibilidade</h2>
+    <div class="table-wrapper">
+        <table id="availability-grid">
+            <thead>
+                <tr>
+                    <th>Período</th>
+                    <th>Segunda</th>
+                    <th>Terça</th>
+                    <th>Quarta</th>
+                    <th>Quinta</th>
+                    <th>Sexta</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in range(1, 6) %}
+                <tr>
+                    <td>{{ i }}ª Aula</td>
+                    <td class="slot" data-dia="Segunda" data-periodo="{{ i }}"></td>
+                    <td class="slot" data-dia="Terça" data-periodo="{{ i }}"></td>
+                    <td class="slot" data-dia="Quarta" data-periodo="{{ i }}"></td>
+                    <td class="slot" data-dia="Quinta" data-periodo="{{ i }}"></td>
+                    <td class="slot" data-dia="Sexta" data-periodo="{{ i }}"></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
