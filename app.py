@@ -15,6 +15,50 @@ app.config['SECRET_KEY'] = 'uma-chave-secreta-final-e-segura-2025'
 def get_db_connection():
     return psycopg2.connect(os.environ.get("DATABASE_URL"), cursor_factory=RealDictCursor)
 
+def inicializar_banco():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role VARCHAR(20) NOT NULL
+        );
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS professores (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(100) UNIQUE NOT NULL
+        );
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS disciplinas (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(100) NOT NULL,
+            aulas_semanais INT,
+            professor_id INT REFERENCES professores(id) ON DELETE CASCADE
+        );
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS disponibilidade (
+            id SERIAL PRIMARY KEY,
+            professor_id INT REFERENCES professores(id) ON DELETE CASCADE,
+            dia_semana VARCHAR(20),
+            periodo VARCHAR(20),
+            disponivel BOOLEAN
+        );
+    """)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Banco de dados inicializado com sucesso!")
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -226,6 +270,11 @@ def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn.commit()
     cursor.close()
     conn.close()
+
+try:
+    inicializar_banco()
+except Exception as e:
+    print("⚠️ Erro ao inicializar o banco:", e)
 
 
 if __name__ == "__main__":
