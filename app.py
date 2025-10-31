@@ -280,3 +280,71 @@ except Exception as e:
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
+# Função para processar o arquivo Excel (Adicionada)
+def processar_planilha_disciplinas(caminho_arquivo):
+    try:
+        # Lendo a planilha. O cabeçalho real está na linha 4 (índice 3)
+        df = pd.read_excel(caminho_arquivo, sheet_name='Planilha1', header=3)
+
+        # Renomear colunas para os nomes esperados no código original
+        df.rename(columns={
+            'Componente': 'disciplina',
+            'HA': 'aulas_semanais',
+            'Professor Titular': 'professor'
+        }, inplace=True)
+
+        # Selecionar e limpar os dados
+        df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
+
+        # Remover linhas onde disciplina ou professor estão vazios
+        df.dropna(subset=['disciplina', 'professor'], inplace=True)
+
+        # Tratar 'aulas_semanais' como numérico e converter para inteiro
+        df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
+        df.dropna(subset=['aulas_semanais'], inplace=True)
+        # O banco de dados espera INT. Vou converter para INT.
+        df['aulas_semanais'] = df['aulas_semanais'].astype(int)
+        
+        return df
+
+    except Exception as e:
+        print(f"Ocorreu um erro ao processar a planilha: {e}")
+        return None
+
+
+@app.route('/upload_planilha', methods=['POST'])
+@login_required
+def upload_planilha():
+    if 'file' not in request.files:
+        flash('Nenhum arquivo enviado.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    file = request.files['file']
+    if file.filename == '':
+        flash('Nenhum arquivo selecionado.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if file and file.filename.endswith(('.xlsx', '.xls')):
+        filename = 'planilha_upload.xlsx'
+        filepath = os.path.join('/tmp', filename)
+        file.save(filepath)
+
+
+        df_disciplinas = processar_planilha_disciplinas(filepath)
+        df_disponibilidade = pd.DataFrame(columns=['professor', 'dia_semana', 'periodo', 'disponivel'])
+
+        if df_disciplinas is not None:
+            try:
+                limpar_e_popular_banco(df_disponibilidade, df_disciplinas)
+                flash('Planilha processada e banco de dados populado com sucesso!', 'success')
+            except Exception as e:
+                flash(f'Erro ao popular o banco de dados: {e}', 'danger')
+        else:
+            flash('Erro ao processar o conteúdo da planilha.', 'danger')
+
+        os.remove(filepath)
+        return redirect(url_for('dashboard'))
+
+    flash('Formato de arquivo inválido. Por favor, envie um arquivo .xlsx ou .xls.', 'danger')
+    return redirect(url_for('dashboard'))
