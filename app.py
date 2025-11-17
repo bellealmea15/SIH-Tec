@@ -325,6 +325,31 @@ def remover_disciplina(id):
     return redirect(url_for('gerenciar_disciplinas'))
 
 
+@app.route('/disponibilidade')
+@login_required
+def gerenciar_disponibilidade():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT d.id, d.dia_semana, d.periodo, d.disponivel, p.nome AS professor_nome
+        FROM disponibilidade d
+        JOIN professores p ON d.professor_id = p.id
+        ORDER BY p.nome, d.dia_semana, d.periodo
+    """)
+    disponibilidade = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM professores ORDER BY nome;")
+    professores = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'gerenciar_disponibilidade.html',
+        disponibilidade=disponibilidade,
+        professores=professores
+    )
 
 def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn = get_db_connection()
