@@ -8,7 +8,7 @@
     <div class="card">
         <h2>1. Importar Dados (Opcional)</h2>
         <p class="card-subtitle">Use esta seção para popular o banco de dados rapidamente a partir de arquivos. Os dados existentes no sistema serão substituídos.</p>
-        <form id="uploadForm" action="{{ url_for('upload_e_processar') }}" method="POST" enctype="multipart/form-data">
+        <form id="uploadForm" action="{{ url_for('upload_planilha') }}" method="POST" enctype="multipart/form-data">
             <div class="file-input-wrapper">
                 <label for="arquivoDisponibilidade">Arquivo de Disponibilidade:</label>
                 <input type="file" id="arquivoDisponibilidade" name="arquivoDisponibilidade" accept=".csv,.xlsx" required>
