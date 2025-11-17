@@ -1,4 +1,3 @@
-
 # app.py
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -58,6 +57,7 @@ def inicializar_banco():
     cursor.close()
     conn.close()
     print("✅ Banco de dados inicializado com sucesso!")
+
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -176,7 +176,7 @@ def dashboard():
     return render_template('dashboard.html')
 
 
-# --- ROTAS DE GESTÃO ---
+# --- ROTAS DE GESTÃO DE PROFESSORES ---
 @app.route('/professores')
 @login_required
 def gerenciar_professores():
@@ -237,6 +237,8 @@ def remover_professor(id):
     flash("Professor removido com sucesso!", "success")
     return redirect(url_for('gerenciar_professores'))
 
+
+
 # --- ROTAS DE DISCIPLINAS ---
 @app.route('/disciplinas')
 @login_required
@@ -291,6 +293,7 @@ def adicionar_disciplina():
     flash("Disciplina adicionada com sucesso!", "success")
     return redirect(url_for('gerenciar_disciplinas'))
 
+
 @app.route('/disciplinas/editar/<int:id>', methods=['POST'])
 @login_required
 def editar_disciplina(id):
@@ -311,6 +314,7 @@ def editar_disciplina(id):
     flash("Disciplina atualizada com sucesso!", "success")
     return redirect(url_for('gerenciar_disciplinas'))
 
+
 @app.route('/disciplinas/remover/<int:id>', methods=['POST'])
 @login_required
 def remover_disciplina(id):
@@ -325,6 +329,8 @@ def remover_disciplina(id):
     return redirect(url_for('gerenciar_disciplinas'))
 
 
+
+# --- ROTAS DE DISPONIBILIDADE ---
 @app.route('/disponibilidade')
 @login_required
 def gerenciar_disponibilidade():
@@ -351,20 +357,9 @@ def gerenciar_disponibilidade():
         professores=professores
     )
 
-@app.route('/usuarios')
-@login_required
-def gerenciar_usuarios():
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
-    cursor.execute("SELECT id, nome, email FROM usuarios ORDER BY nome;")
-    usuarios = cursor.fetchall()
 
-    cursor.close()
-    conn.close()
-
-    return render_template('gerenciar_usuarios.html', usuarios=usuarios)
-
+# --- ROTAS DE USUÁRIOS (CORRIGIDAS) ---
 @app.route('/usuarios')
 @login_required
 def gerenciar_usuarios():
@@ -398,6 +393,7 @@ def gerenciar_usuarios():
         search_query=search_query
     )
 
+
 @app.route('/usuarios/adicionar', methods=['POST'])
 @login_required
 def adicionar_usuario():
@@ -412,7 +408,7 @@ def adicionar_usuario():
     cursor = conn.cursor()
 
     cursor.execute("""
-        INSERT INTO usuarios (username, password, role)
+        INSERT INTO usuarios (username, password_hash, role)
         VALUES (%s, %s, %s)
     """, (username, hashed, role))
 
@@ -440,6 +436,71 @@ def remover_usuario(id):
     return redirect(url_for('gerenciar_usuarios'))
 
 
+
+# --- IMPORTAÇÃO DE PLANILHAS ---
+def processar_planilha_disciplinas(caminho_arquivo):
+    try:
+        df = pd.read_excel(caminho_arquivo, sheet_name='Planilha1', header=3)
+
+        df.rename(columns={
+            'Componente': 'disciplina',
+            'HA': 'aulas_semanais',
+            'Professor Titular': 'professor'
+        }, inplace=True)
+
+        df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
+
+        df.dropna(subset=['disciplina', 'professor'], inplace=True)
+
+        df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
+        df.dropna(subset=['aulas_semanais'], inplace=True)
+        df['aulas_semanais'] = df['aulas_semanais'].astype(int)
+        
+        return df
+
+    except Exception as e:
+        print(f"Ocorreu um erro ao processar a planilha: {e}")
+        return None
+
+
+@app.route('/upload_planilha', methods=['POST'])
+@login_required
+def upload_planilha():
+    if 'file' not in request.files:
+        flash('Nenhum arquivo enviado.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    file = request.files['file']
+    if file.filename == '':
+        flash('Nenhum arquivo selecionado.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if file and file.filename.endswith(('.xlsx', '.xls')):
+        filename = 'planilha_upload.xlsx'
+        filepath = os.path.join('/tmp', filename)
+        file.save(filepath)
+
+        df_disciplinas = processar_planilha_disciplinas(filepath)
+        df_disponibilidade = pd.DataFrame(columns=['professor', 'dia_semana', 'periodo', 'disponivel'])
+
+        if df_disciplinas is not None:
+            try:
+                limpar_e_popular_banco(df_disponibilidade, df_disciplinas)
+                flash('Planilha processada e banco de dados populado com sucesso!', 'success')
+            except Exception as e:
+                flash(f'Erro ao popular o banco de dados: {e}', 'danger')
+        else:
+            flash('Erro ao processar o conteúdo da planilha.', 'danger')
+
+        os.remove(filepath)
+        return redirect(url_for('dashboard'))
+
+    flash('Formato de arquivo inválido. Por favor, envie um arquivo .xlsx ou .xls.', 'danger')
+    return redirect(url_for('dashboard'))
+
+
+
+# --- LIMPAR E POPULAR BANCO ---
 def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -473,80 +534,17 @@ def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     cursor.close()
     conn.close()
 
+
+
+# --- INICIALIZA BANCO ---
 try:
     inicializar_banco()
 except Exception as e:
     print("⚠️ Erro ao inicializar o banco:", e)
 
 
+
+# --- EXECUÇÃO LOCAL ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
-# Função para processar o arquivo Excel (Adicionada)
-def processar_planilha_disciplinas(caminho_arquivo):
-    try:
-        # Lendo a planilha. O cabeçalho real está na linha 4 (índice 3)
-        df = pd.read_excel(caminho_arquivo, sheet_name='Planilha1', header=3)
-
-        # Renomear colunas para os nomes esperados no código original
-        df.rename(columns={
-            'Componente': 'disciplina',
-            'HA': 'aulas_semanais',
-            'Professor Titular': 'professor'
-        }, inplace=True)
-
-        # Selecionar e limpar os dados
-        df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
-
-        # Remover linhas onde disciplina ou professor estão vazios
-        df.dropna(subset=['disciplina', 'professor'], inplace=True)
-
-        # Tratar 'aulas_semanais' como numérico e converter para inteiro
-        df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
-        df.dropna(subset=['aulas_semanais'], inplace=True)
-        # O banco de dados espera INT. Vou converter para INT.
-        df['aulas_semanais'] = df['aulas_semanais'].astype(int)
-        
-        return df
-
-    except Exception as e:
-        print(f"Ocorreu um erro ao processar a planilha: {e}")
-        return None
-
-
-@app.route('/upload_planilha', methods=['POST'])
-@login_required
-def upload_planilha():
-    if 'file' not in request.files:
-        flash('Nenhum arquivo enviado.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    file = request.files['file']
-    if file.filename == '':
-        flash('Nenhum arquivo selecionado.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    if file and file.filename.endswith(('.xlsx', '.xls')):
-        filename = 'planilha_upload.xlsx'
-        filepath = os.path.join('/tmp', filename)
-        file.save(filepath)
-
-
-        df_disciplinas = processar_planilha_disciplinas(filepath)
-        df_disponibilidade = pd.DataFrame(columns=['professor', 'dia_semana', 'periodo', 'disponivel'])
-
-        if df_disciplinas is not None:
-            try:
-                limpar_e_popular_banco(df_disponibilidade, df_disciplinas)
-                flash('Planilha processada e banco de dados populado com sucesso!', 'success')
-            except Exception as e:
-                flash(f'Erro ao popular o banco de dados: {e}', 'danger')
-        else:
-            flash('Erro ao processar o conteúdo da planilha.', 'danger')
-
-        os.remove(filepath)
-        return redirect(url_for('dashboard'))
-
-    flash('Formato de arquivo inválido. Por favor, envie um arquivo .xlsx ou .xls.', 'danger')
-    return redirect(url_for('dashboard'))
