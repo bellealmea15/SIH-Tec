@@ -351,6 +351,95 @@ def gerenciar_disponibilidade():
         professores=professores
     )
 
+@app.route('/usuarios')
+@login_required
+def gerenciar_usuarios():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, nome, email FROM usuarios ORDER BY nome;")
+    usuarios = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template('gerenciar_usuarios.html', usuarios=usuarios)
+
+@app.route('/usuarios')
+@login_required
+def gerenciar_usuarios():
+    search_query = request.args.get('q', '')
+
+    conn = get_db_connection()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+    if search_query:
+        cursor.execute("""
+            SELECT id, username, role 
+            FROM usuarios 
+            WHERE username ILIKE %s
+            ORDER BY username
+        """, (f"%{search_query}%",))
+    else:
+        cursor.execute("""
+            SELECT id, username, role 
+            FROM usuarios 
+            ORDER BY username
+        """)
+
+    usuarios = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'gerenciar_usuarios.html',
+        usuarios=usuarios,
+        search_query=search_query
+    )
+
+@app.route('/usuarios/adicionar', methods=['POST'])
+@login_required
+def adicionar_usuario():
+    username = request.form['username']
+    password = request.form['password']
+    role = request.form['role']
+
+    # hash da senha
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO usuarios (username, password, role)
+        VALUES (%s, %s, %s)
+    """, (username, hashed, role))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash("Usuário criado com sucesso!", "success")
+    return redirect(url_for('gerenciar_usuarios'))
+
+
+@app.route('/usuarios/remover/<int:id>', methods=['POST'])
+@login_required
+def remover_usuario(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM usuarios WHERE id = %s", (id,))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    flash("Usuário removido!", "success")
+    return redirect(url_for('gerenciar_usuarios'))
+
+
 def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn = get_db_connection()
     cursor = conn.cursor()
