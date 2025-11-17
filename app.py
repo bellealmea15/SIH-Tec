@@ -237,6 +237,94 @@ def remover_professor(id):
     flash("Professor removido com sucesso!", "success")
     return redirect(url_for('gerenciar_professores'))
 
+# --- ROTAS DE DISCIPLINAS ---
+@app.route('/disciplinas')
+@login_required
+def gerenciar_disciplinas():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    search_query = request.args.get('q', '')
+
+    query = """
+        SELECT d.id, d.nome, d.aulas_semanais, d.professor_id, p.nome AS professor_nome
+        FROM disciplinas d
+        LEFT JOIN professores p ON d.professor_id = p.id
+        WHERE d.nome ILIKE %s OR p.nome ILIKE %s
+        ORDER BY d.nome;
+    """
+
+    cursor.execute(query, (f'%{search_query}%', f'%{search_query}%'))
+    disciplinas = cursor.fetchall()
+
+    cursor.execute("SELECT id, nome FROM professores ORDER BY nome")
+    professores = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template(
+        'gerenciar_disciplinas.html',
+        disciplinas=disciplinas,
+        professores=professores,
+        search_query=search_query
+    )
+
+
+@app.route('/disciplinas/adicionar', methods=['POST'])
+@login_required
+def adicionar_disciplina():
+    nome = request.form['nome']
+    aulas = request.form['aulas_semanais']
+    professor_id = request.form['professor_id'] or None
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO disciplinas (nome, aulas_semanais, professor_id) VALUES (%s, %s, %s)",
+        (nome, aulas, professor_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash("Disciplina adicionada com sucesso!", "success")
+    return redirect(url_for('gerenciar_disciplinas'))
+
+@app.route('/disciplinas/editar/<int:id>', methods=['POST'])
+@login_required
+def editar_disciplina(id):
+    nome = request.form['nome']
+    aulas = request.form['aulas_semanais']
+    professor_id = request.form['professor_id'] or None
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE disciplinas SET nome=%s, aulas_semanais=%s, professor_id=%s WHERE id=%s",
+        (nome, aulas, professor_id, id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash("Disciplina atualizada com sucesso!", "success")
+    return redirect(url_for('gerenciar_disciplinas'))
+
+@app.route('/disciplinas/remover/<int:id>', methods=['POST'])
+@login_required
+def remover_disciplina(id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM disciplinas WHERE id=%s", (id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash("Disciplina removida com sucesso!", "success")
+    return redirect(url_for('gerenciar_disciplinas'))
+
+
 
 def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn = get_db_connection()
