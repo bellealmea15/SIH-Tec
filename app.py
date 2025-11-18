@@ -476,8 +476,11 @@ def upload_e_processar():
 
 # --- ROTA DA API PARA GERAR HORÁRIO ---
 def coletar_dados_para_gerador():
+    """Coleta e estrutura todos os dados necessários do banco de dados."""
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Coletar disciplinas e suas necessidades
     cursor.execute("""
         SELECT d.id, d.nome, d.aulas_semanais, d.professor_id, p.nome as professor_nome
         FROM disciplinas d JOIN professores p ON d.professor_id = p.id
@@ -485,13 +488,23 @@ def coletar_dados_para_gerador():
     disciplinas = cursor.fetchall()
     if not disciplinas:
         raise ValueError("Não há disciplinas com professores atribuídos para gerar o horário.")
-    cursor.execute("SELECT professor_id, dia_semana, periodo FROM disponibilidade WHERE disponivel = TRUE")
+
+    # Coletar disponibilidade dos professores
+    cursor.execute("""
+        SELECT professor_id, dia_semana, periodo
+        FROM disponibilidade
+        WHERE disponivel = TRUE
+    """)
     disponibilidades_raw = cursor.fetchall()
+    
+    # CORREÇÃO: Verifica se a consulta ao banco de dados retornou algum resultado.
+    if not disponibilidades_raw:
+        raise ValueError("Nenhum professor cadastrou sua disponibilidade. Vá até 'Gestão de Disponibilidade' e marque os horários.")
+
     disponibilidade = defaultdict(list)
     for disp in disponibilidades_raw:
         disponibilidade[disp['professor_id']].append((disp['dia_semana'], disp['periodo']))
-    if not disponibilidade:
-        raise ValueError("Nenhum professor cadastrou sua disponibilidade.")
+    
     cursor.close()
     conn.close()
     return disciplinas, disponibilidade
