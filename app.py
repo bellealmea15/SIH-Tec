@@ -12,7 +12,9 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'uma-chave-secreta-final-e-segura-2025'
 
 def get_db_connection():
-    return psycopg2.connect(os.environ.get("DATABASE_URL"), cursor_factory=RealDictCursor)
+    # Substitua pela sua string de conexão real se não estiver usando variáveis de ambiente
+    database_url = os.environ.get("DATABASE_URL", "postgresql://user:password@localhost/dbname")
+    return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
 
 def inicializar_banco():
     conn = get_db_connection()
@@ -39,7 +41,7 @@ def inicializar_banco():
             id SERIAL PRIMARY KEY,
             nome VARCHAR(100) NOT NULL,
             aulas_semanais INT,
-            professor_id INT REFERENCES professores(id) ON DELETE CASCADE
+            professor_id INT REFERENCES professores(id) ON DELETE SET NULL
         );
     """)
 
@@ -48,7 +50,7 @@ def inicializar_banco():
             id SERIAL PRIMARY KEY,
             professor_id INT REFERENCES professores(id) ON DELETE CASCADE,
             dia_semana VARCHAR(20),
-            periodo VARCHAR(20),
+            periodo INT,
             disponivel BOOLEAN
         );
     """)
@@ -245,32 +247,19 @@ def remover_professor(id):
 def gerenciar_disciplinas():
     conn = get_db_connection()
     cursor = conn.cursor()
-
     search_query = request.args.get('q', '')
-
     query = """
         SELECT d.id, d.nome, d.aulas_semanais, d.professor_id, p.nome AS professor_nome
-        FROM disciplinas d
-        LEFT JOIN professores p ON d.professor_id = p.id
-        WHERE d.nome ILIKE %s OR p.nome ILIKE %s
-        ORDER BY d.nome;
+        FROM disciplinas d LEFT JOIN professores p ON d.professor_id = p.id
+        WHERE d.nome ILIKE %s OR p.nome ILIKE %s ORDER BY d.nome;
     """
-
     cursor.execute(query, (f'%{search_query}%', f'%{search_query}%'))
     disciplinas = cursor.fetchall()
-
     cursor.execute("SELECT id, nome FROM professores ORDER BY nome")
     professores = cursor.fetchall()
-
     cursor.close()
     conn.close()
-
-    return render_template(
-        'gerenciar_disciplinas.html',
-        disciplinas=disciplinas,
-        professores=professores,
-        search_query=search_query
-    )
+    return render_template('gerenciar_disciplinas.html', disciplinas=disciplinas, professores=professores, search_query=search_query)
 
 
 @app.route('/disciplinas/adicionar', methods=['POST'])
@@ -278,18 +267,14 @@ def gerenciar_disciplinas():
 def adicionar_disciplina():
     nome = request.form['nome']
     aulas = request.form['aulas_semanais']
-    professor_id = request.form['professor_id'] or None
-
+    professor_id = request.form.get('professor_id')
+    if professor_id == '0': professor_id = None
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO disciplinas (nome, aulas_semanais, professor_id) VALUES (%s, %s, %s)",
-        (nome, aulas, professor_id)
-    )
+    cursor.execute("INSERT INTO disciplinas (nome, aulas_semanais, professor_id) VALUES (%s, %s, %s)", (nome, aulas, professor_id))
     conn.commit()
     cursor.close()
     conn.close()
-
     flash("Disciplina adicionada com sucesso!", "success")
     return redirect(url_for('gerenciar_disciplinas'))
 
@@ -299,18 +284,14 @@ def adicionar_disciplina():
 def editar_disciplina(id):
     nome = request.form['nome']
     aulas = request.form['aulas_semanais']
-    professor_id = request.form['professor_id'] or None
-
+    professor_id = request.form.get('professor_id')
+    if professor_id == '0': professor_id = None
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE disciplinas SET nome=%s, aulas_semanais=%s, professor_id=%s WHERE id=%s",
-        (nome, aulas, professor_id, id)
-    )
+    cursor.execute("UPDATE disciplinas SET nome=%s, aulas_semanais=%s, professor_id=%s WHERE id=%s", (nome, aulas, professor_id, id))
     conn.commit()
     cursor.close()
     conn.close()
-
     flash("Disciplina atualizada com sucesso!", "success")
     return redirect(url_for('gerenciar_disciplinas'))
 
@@ -324,10 +305,8 @@ def remover_disciplina(id):
     conn.commit()
     cursor.close()
     conn.close()
-
     flash("Disciplina removida com sucesso!", "success")
     return redirect(url_for('gerenciar_disciplinas'))
-
 
 
 # --- ROTAS DE DISPONIBILIDADE ---
@@ -336,184 +315,88 @@ def remover_disciplina(id):
 def gerenciar_disponibilidade():
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT d.id, d.dia_semana, d.periodo, d.disponivel, p.nome AS professor_nome
-        FROM disponibilidade d
-        JOIN professores p ON d.professor_id = p.id
-        ORDER BY p.nome, d.dia_semana, d.periodo
-    """)
-    disponibilidade = cursor.fetchall()
-
     cursor.execute("SELECT id, nome FROM professores ORDER BY nome;")
     professores = cursor.fetchall()
-
     cursor.close()
     conn.close()
-
-    return render_template(
-        'gerenciar_disponibilidade.html',
-        disponibilidade=disponibilidade,
-        professores=professores
-    )
+    return render_template('gerenciar_disponibilidade.html', professores=professores)
 
 
-
-# --- ROTAS DE USUÁRIOS (CORRIGIDAS) ---
+# --- ROTAS DE USUÁRIOS ---
 @app.route('/usuarios')
 @login_required
+@admin_required
 def gerenciar_usuarios():
     search_query = request.args.get('q', '')
-
     conn = get_db_connection()
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-    if search_query:
-        cursor.execute("""
-            SELECT id, username, role 
-            FROM usuarios 
-            WHERE username ILIKE %s
-            ORDER BY username
-        """, (f"%{search_query}%",))
-    else:
-        cursor.execute("""
-            SELECT id, username, role 
-            FROM usuarios 
-            ORDER BY username
-        """)
-
+    cursor = conn.cursor()
+    query = "SELECT id, username, role FROM usuarios WHERE username ILIKE %s ORDER BY username"
+    cursor.execute(query, (f'%{search_query}%',))
     usuarios = cursor.fetchall()
-
     cursor.close()
     conn.close()
-
-    return render_template(
-        'gerenciar_usuarios.html',
-        usuarios=usuarios,
-        search_query=search_query
-    )
+    return render_template('gerenciar_usuarios.html', usuarios=usuarios, search_query=search_query)
 
 
 @app.route('/usuarios/adicionar', methods=['POST'])
 @login_required
+@admin_required
 def adicionar_usuario():
     username = request.form['username']
-    password = request.form['password']
+    password = request.form['password'].encode('utf-8')
     role = request.form['role']
-
-    # hash da senha
-    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
+    hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode('utf-8')
     conn = get_db_connection()
     cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO usuarios (username, password_hash, role)
-        VALUES (%s, %s, %s)
-    """, (username, hashed, role))
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    flash("Usuário criado com sucesso!", "success")
+    try:
+        cursor.execute("INSERT INTO usuarios (username, password_hash, role) VALUES (%s, %s, %s)", (username, hashed, role))
+        conn.commit()
+        flash("Usuário criado com sucesso!", "success")
+    except psycopg2.errors.UniqueViolation:
+        flash(f"O nome de usuário '{username}' já existe.", "danger")
+    finally:
+        cursor.close()
+        conn.close()
     return redirect(url_for('gerenciar_usuarios'))
 
 
 @app.route('/usuarios/remover/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def remover_usuario(id):
+    if id == current_user.id:
+        flash("Você не pode remover a si mesmo.", "danger")
+        return redirect(url_for('gerenciar_usuarios'))
     conn = get_db_connection()
     cursor = conn.cursor()
-
     cursor.execute("DELETE FROM usuarios WHERE id = %s", (id,))
     conn.commit()
-
     cursor.close()
     conn.close()
-
-    flash("Usuário removido!", "success")
+    flash("Usuário removido com sucesso!", "success")
     return redirect(url_for('gerenciar_usuarios'))
-
-
-
-# --- IMPORTAÇÃO DE PLANILHAS ---
-def processar_planilha_disciplinas(caminho_arquivo):
-    try:
-        df = pd.read_excel(caminho_arquivo, sheet_name='Planilha1', header=3)
-
-        df.rename(columns={
-            'Componente': 'disciplina',
-            'HA': 'aulas_semanais',
-            'Professor Titular': 'professor'
-        }, inplace=True)
-
-        df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
-
-        df.dropna(subset=['disciplina', 'professor'], inplace=True)
-
-        df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
-        df.dropna(subset=['aulas_semanais'], inplace=True)
-        df['aulas_semanais'] = df['aulas_semanais'].astype(int)
-        
-        return df
-
-    except Exception as e:
-        print(f"Ocorreu um erro ao processar a planilha: {e}")
-        return None
-
-
-@app.route('/upload_planilha', methods=['POST'])
-@login_required
-def upload_planilha():
-    if 'file' not in request.files:
-        flash('Nenhum arquivo enviado.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    file = request.files['file']
-    if file.filename == '':
-        flash('Nenhum arquivo selecionado.', 'danger')
-        return redirect(url_for('dashboard'))
-
-    if file and file.filename.endswith(('.xlsx', '.xls')):
-        filename = 'planilha_upload.xlsx'
-        filepath = os.path.join('/tmp', filename)
-        file.save(filepath)
-
-        df_disciplinas = processar_planilha_disciplinas(filepath)
-        df_disponibilidade = pd.DataFrame(columns=['professor', 'dia_semana', 'periodo', 'disponivel'])
-
-        if df_disciplinas is not None:
-            try:
-                limpar_e_popular_banco(df_disponibilidade, df_disciplinas)
-                flash('Planilha processada e banco de dados populado com sucesso!', 'success')
-            except Exception as e:
-                flash(f'Erro ao popular o banco de dados: {e}', 'danger')
-        else:
-            flash('Erro ao processar o conteúdo da planilha.', 'danger')
-
-        os.remove(filepath)
-        return redirect(url_for('dashboard'))
-
-    flash('Formato de arquivo inválido. Por favor, envie um arquivo .xlsx ou .xls.', 'danger')
-    return redirect(url_for('dashboard'))
-
 
 
 # --- LIMPAR E POPULAR BANCO ---
 def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("TRUNCATE TABLE disponibilidade RESTART IDENTITY CASCADE;")
-    cursor.execute("TRUNCATE TABLE disciplinas RESTART IDENTITY CASCADE;")
-    cursor.execute("TRUNCATE TABLE professores RESTART IDENTITY CASCADE;")
+    cursor.execute("TRUNCATE TABLE disponibilidade, disciplinas, professores RESTART IDENTITY CASCADE;")
+    
+    professores_disp = df_disponibilidade['professor'].dropna().unique() if not df_disponibilidade.empty else []
+    professores_disc = df_disciplinas['professor'].dropna().unique() if not df_disciplinas.empty else []
+    
+    todos_professores = pd.unique(list(professores_disp) + list(professores_disc))
 
-    professores = pd.concat([df_disponibilidade['professor'], df_disciplinas['professor']]).dropna().unique()
     prof_map = {}
-    for prof in professores:
-        cursor.execute("INSERT INTO professores (nome) VALUES (%s) RETURNING id;", (prof,))
-        prof_map[prof] = cursor.fetchone()['id']
-    conn.commit()
+    for prof in todos_professores:
+        cursor.execute("INSERT INTO professores (nome) VALUES (%s) ON CONFLICT (nome) DO NOTHING RETURNING id, nome;", (prof,))
+        res = cursor.fetchone()
+        if res:
+            prof_map[prof] = res['id']
+        else: # Se o professor já existia, pega o ID dele
+            cursor.execute("SELECT id FROM professores WHERE nome = %s;", (prof,))
+            prof_map[prof] = cursor.fetchone()['id']
 
     for _, row in df_disciplinas.iterrows():
         prof_id = prof_map.get(row['professor'])
@@ -528,23 +411,107 @@ def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
         if prof_id:
             cursor.execute(
                 "INSERT INTO disponibilidade (professor_id, dia_semana, periodo, disponivel) VALUES (%s, %s, %s, %s)",
-                (prof_id, row['dia_semana'], row['periodo'], bool(row['disponivel']))
+                (prof_id, row['dia_semana'], row['periodo'], row['disponivel'])
             )
     conn.commit()
     cursor.close()
     conn.close()
 
 
+# --- IMPORTAÇÃO DE PLANILHAS (BLOCO CORRIGIDO) ---
+
+def processar_planilha_disciplinas(caminho_arquivo):
+    try:
+        df = pd.read_excel(caminho_arquivo, sheet_name='Planilha1', header=3)
+        df.rename(columns={
+            'Componente': 'disciplina',
+            'HA': 'aulas_semanais',
+            'Professor Titular': 'professor'
+        }, inplace=True)
+        df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
+        df.dropna(subset=['disciplina', 'professor'], inplace=True)
+        df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
+        df.dropna(subset=['aulas_semanais'], inplace=True)
+        df['aulas_semanais'] = df['aulas_semanais'].astype(int)
+        return df
+    except Exception as e:
+        flash(f"Erro ao ler a planilha de Quadro de Aulas: {e}", "danger")
+        return None
+
+def processar_planilha_disponibilidade(caminho_arquivo):
+    try:
+        df = pd.read_excel(caminho_arquivo)
+        df_melted = df.melt(id_vars=['Professor'], 
+                            value_vars=['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+                            var_name='dia_semana', 
+                            value_name='periodos_disponiveis')
+        df_melted.rename(columns={'Professor': 'professor'}, inplace=True)
+        
+        df_final = []
+        for _, row in df_melted.iterrows():
+            if pd.notna(row['periodos_disponiveis']):
+                periodos_str = str(row['periodos_disponiveis']).split(',')
+                for periodo in periodos_str:
+                    if periodo.strip().isdigit():
+                         df_final.append({
+                            'professor': row['professor'],
+                            'dia_semana': row['dia_semana'],
+                            'periodo': int(periodo.strip()),
+                            'disponivel': True
+                        })
+        return pd.DataFrame(df_final)
+    except Exception as e:
+        flash(f"Erro ao ler a planilha de Disponibilidade: {e}", "danger")
+        return None
+
+
+@app.route('/upload_e_processar', methods=['POST']) # Rota corrigida para corresponder ao HTML
+@login_required
+def upload_e_processar():
+    if 'arquivoDisponibilidade' not in request.files or 'arquivoQuadroAulas' not in request.files:
+        flash('É necessário enviar ambos os arquivos (Disponibilidade e Quadro de Aulas).', 'danger')
+        return redirect(url_for('dashboard'))
+
+    arquivo_disp = request.files['arquivoDisponibilidade']
+    arquivo_quadro = request.files['arquivoQuadroAulas']
+
+    if arquivo_disp.filename == '' or arquivo_quadro.filename == '':
+        flash('Um ou mais arquivos não foram selecionados.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if arquivo_disp and arquivo_quadro:
+        caminho_disp = os.path.join('/tmp', 'temp_disponibilidade.xlsx')
+        caminho_quadro = os.path.join('/tmp', 'temp_quadro_aulas.xlsx')
+        arquivo_disp.save(caminho_disp)
+        arquivo_quadro.save(caminho_quadro)
+
+        df_disponibilidade = processar_planilha_disponibilidade(caminho_disp)
+        df_disciplinas = processar_planilha_disciplinas(caminho_quadro)
+
+        os.remove(caminho_disp)
+        os.remove(caminho_quadro)
+
+        if df_disponibilidade is not None and df_disciplinas is not None:
+            try:
+                limpar_e_popular_banco(df_disponibilidade, df_disciplinas)
+                flash('Arquivos processados e banco de dados atualizado com sucesso!', 'success')
+            except Exception as e:
+                flash(f'Erro ao salvar os dados no banco: {e}', 'danger')
+        else:
+            flash('Falha ao processar um ou mais arquivos. Verifique o formato e o conteúdo das planilhas.', 'danger')
+
+    return redirect(url_for('dashboard'))
+
 
 # --- INICIALIZA BANCO ---
 try:
-    inicializar_banco()
+    with app.app_context():
+        inicializar_banco()
 except Exception as e:
-    print("⚠️ Erro ao inicializar o banco:", e)
-
+    print(f"⚠️ Erro ao inicializar o banco de dados: {e}")
 
 
 # --- EXECUÇÃO LOCAL ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)
