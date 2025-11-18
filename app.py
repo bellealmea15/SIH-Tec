@@ -19,7 +19,6 @@ def get_db_connection():
 def inicializar_banco():
     conn = get_db_connection()
     cursor = conn.cursor()
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
             id SERIAL PRIMARY KEY,
@@ -28,14 +27,12 @@ def inicializar_banco():
             role VARCHAR(20) NOT NULL
         );
     """)
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS professores (
             id SERIAL PRIMARY KEY,
             nome VARCHAR(100) UNIQUE NOT NULL
         );
     """)
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS disciplinas (
             id SERIAL PRIMARY KEY,
@@ -44,7 +41,6 @@ def inicializar_banco():
             professor_id INT REFERENCES professores(id) ON DELETE SET NULL
         );
     """)
-
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS disponibilidade (
             id SERIAL PRIMARY KEY,
@@ -54,7 +50,6 @@ def inicializar_banco():
             disponivel BOOLEAN
         );
     """)
-
     conn.commit()
     cursor.close()
     conn.close()
@@ -101,7 +96,6 @@ def admin_required(f):
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(id) FROM usuarios")
@@ -109,24 +103,20 @@ def login():
     registration_enabled = user_count == 0
     cursor.close()
     conn.close()
-
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password'].encode('utf-8')
-
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
         user_data = cursor.fetchone()
         cursor.close()
         conn.close()
-
         if user_data and bcrypt.checkpw(password, user_data['password_hash'].encode('utf-8')):
             login_user(User(id=user_data['id'], username=user_data['username'], role=user_data['role']))
             return redirect(url_for('dashboard'))
         else:
             flash('Usuário ou senha inválidos.', 'danger')
-
     return render_template('login.html', registration_enabled=registration_enabled)
 
 
@@ -134,24 +124,20 @@ def login():
 def register():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard'))
-
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(id) FROM usuarios")
     user_count = cursor.fetchone()['count']
-
     if user_count > 0:
-        flash('O registro público está desativado. Novos usuários só podem ser criados por um administrador.', 'warning')
+        flash('O registro público está desativado.', 'warning')
         cursor.close()
         conn.close()
         return redirect(url_for('login'))
-
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password'].encode('utf-8')
         hashed_password = bcrypt.hashpw(password, bcrypt.gensalt())
         role = 'admin'
-
         cursor.execute("INSERT INTO usuarios (username, password_hash, role) VALUES (%s, %s, %s)", 
                        (username, hashed_password.decode('utf-8'), role))
         conn.commit()
@@ -159,7 +145,6 @@ def register():
         conn.close()
         flash('Conta de Administrador criada com sucesso! Faça o login.', 'success')
         return redirect(url_for('login'))
-
     cursor.close()
     conn.close()
     return render_template('register.html')
@@ -238,7 +223,6 @@ def remover_professor(id):
     conn.close()
     flash("Professor removido com sucesso!", "success")
     return redirect(url_for('gerenciar_professores'))
-
 
 
 # --- ROTAS DE DISCIPLINAS ---
@@ -414,20 +398,15 @@ def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
     conn.close()
 
 
-# --- IMPORTAÇÃO DE PLANILHAS (BLOCO CORRIGIDO) ---
-
+# --- IMPORTAÇÃO DE PLANILHAS ---
 def processar_planilha_disciplinas(caminho_arquivo):
     try:
-        # CORREÇÃO 2: Remove a exigência da aba "Planilha1" e lê a primeira por padrão.
         df = pd.read_excel(caminho_arquivo, header=3) 
-        
-        # Renomeia as colunas de forma mais segura
         df.rename(columns={
-            df.columns[0]: 'disciplina',      # Assume que a primeira coluna é 'Componente'
-            df.columns[1]: 'aulas_semanais',  # Assume que a segunda coluna é 'HA'
-            df.columns[2]: 'professor'       # Assume que a terceira coluna é 'Professor Titular'
+            df.columns[0]: 'disciplina',
+            df.columns[1]: 'aulas_semanais',
+            df.columns[2]: 'professor'
         }, inplace=True)
-
         df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
         df.dropna(subset=['disciplina', 'professor'], inplace=True)
         df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
@@ -441,18 +420,10 @@ def processar_planilha_disciplinas(caminho_arquivo):
 def processar_planilha_disponibilidade(caminho_arquivo):
     try:
         df = pd.read_excel(caminho_arquivo)
-        
-        # CORREÇÃO 1: Torna a leitura de colunas flexível
-        coluna_professor = df.columns[0] # Pega o nome da primeira coluna (ex: "Professor")
-        colunas_dias = df.columns[1:]    # Pega o nome das colunas restantes (ex: "Segunda", "Terça", etc)
-
-        df_melted = df.melt(id_vars=[coluna_professor], 
-                            value_vars=colunas_dias,
-                            var_name='dia_semana', 
-                            value_name='periodos_disponiveis')
-        
+        coluna_professor = df.columns[0]
+        colunas_dias = df.columns[1:]
+        df_melted = df.melt(id_vars=[coluna_professor], value_vars=colunas_dias, var_name='dia_semana', value_name='periodos_disponiveis')
         df_melted.rename(columns={coluna_professor: 'professor'}, inplace=True)
-        
         df_final = []
         for _, row in df_melted.iterrows():
             if pd.notna(row['periodos_disponiveis']):
@@ -470,37 +441,28 @@ def processar_planilha_disponibilidade(caminho_arquivo):
         flash(f"Erro ao ler a planilha de Disponibilidade: {e}", "danger")
         return None
 
-
 @app.route('/upload_e_processar', methods=['POST'])
 @login_required
 def upload_e_processar():
     if 'arquivoDisponibilidade' not in request.files or 'arquivoQuadroAulas' not in request.files:
         flash('É necessário enviar ambos os arquivos (Disponibilidade e Quadro de Aulas).', 'danger')
         return redirect(url_for('dashboard'))
-
     arquivo_disp = request.files['arquivoDisponibilidade']
     arquivo_quadro = request.files['arquivoQuadroAulas']
-
     if arquivo_disp.filename == '' or arquivo_quadro.filename == '':
         flash('Um ou mais arquivos não foram selecionados.', 'danger')
         return redirect(url_for('dashboard'))
-
     if arquivo_disp and arquivo_quadro:
-        # Cria um diretório temporário seguro se não existir
         tmp_dir = '/tmp/app_uploads'
         os.makedirs(tmp_dir, exist_ok=True)
-        
         caminho_disp = os.path.join(tmp_dir, 'temp_disponibilidade.xlsx')
         caminho_quadro = os.path.join(tmp_dir, 'temp_quadro_aulas.xlsx')
         arquivo_disp.save(caminho_disp)
         arquivo_quadro.save(caminho_quadro)
-
         df_disponibilidade = processar_planilha_disponibilidade(caminho_disp)
         df_disciplinas = processar_planilha_disciplinas(caminho_quadro)
-
         os.remove(caminho_disp)
         os.remove(caminho_quadro)
-
         if df_disponibilidade is not None and df_disciplinas is not None:
             try:
                 limpar_e_popular_banco(df_disponibilidade, df_disciplinas)
@@ -509,8 +471,75 @@ def upload_e_processar():
                 flash(f'Erro ao salvar os dados no banco: {e}', 'danger')
         else:
             flash('Falha ao processar um ou mais arquivos. Verifique o formato e o conteúdo das planilhas.', 'danger')
-
     return redirect(url_for('dashboard'))
+
+
+# --- ROTA DA API PARA GERAR HORÁRIO ---
+def coletar_dados_para_gerador():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT d.id, d.nome, d.aulas_semanais, d.professor_id, p.nome as professor_nome
+        FROM disciplinas d JOIN professores p ON d.professor_id = p.id
+    """)
+    disciplinas = cursor.fetchall()
+    if not disciplinas:
+        raise ValueError("Não há disciplinas com professores atribuídos para gerar o horário.")
+    cursor.execute("SELECT professor_id, dia_semana, periodo FROM disponibilidade WHERE disponivel = TRUE")
+    disponibilidades_raw = cursor.fetchall()
+    disponibilidade = defaultdict(list)
+    for disp in disponibilidades_raw:
+        disponibilidade[disp['professor_id']].append((disp['dia_semana'], disp['periodo']))
+    if not disponibilidade:
+        raise ValueError("Nenhum professor cadastrou sua disponibilidade.")
+    cursor.close()
+    conn.close()
+    return disciplinas, disponibilidade
+
+@app.route('/gerar_horario', methods=['POST'])
+@login_required
+def gerar_horario():
+    try:
+        disciplinas, disponibilidade = coletar_dados_para_gerador()
+        horario_gerado = defaultdict(dict)
+        aulas_nao_alocadas = []
+        dias_semana = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta"]
+        periodos = [1, 2, 3, 4, 5]
+        slots_ocupados_prof = defaultdict(list)
+        for disc in disciplinas:
+            alocadas = 0
+            for _ in range(disc['aulas_semanais']):
+                aula_foi_alocada = False
+                for dia in random.sample(dias_semana, len(dias_semana)):
+                    for periodo in random.sample(periodos, len(periodos)):
+                        slot_horario = (dia, periodo)
+                        if slot_horario in disponibilidade.get(disc['professor_id'], []) and \
+                           slot_horario not in horario_gerado and \
+                           slot_horario not in slots_ocupados_prof[disc['professor_id']]:
+                            horario_gerado[slot_horario] = {"disciplina": disc['nome'], "professor": disc['professor_nome']}
+                            slots_ocupados_prof[disc['professor_id']].append(slot_horario)
+                            alocadas += 1
+                            aula_foi_alocada = True
+                            break
+                    if aula_foi_alocada:
+                        break
+            if alocadas < disc['aulas_semanais']:
+                aulas_nao_alocadas.append({
+                    "disciplina": disc['nome'],
+                    "professor": disc['professor_nome'],
+                    "faltam_alocar": disc['aulas_semanais'] - alocadas
+                })
+        resultado_final = {
+            "horario": [{"dia": dia, "periodo": periodo, **dados} for (dia, periodo), dados in horario_gerado.items()],
+            "nao_alocadas": aulas_nao_alocadas
+        }
+        opcoes = [resultado_final for _ in range(10)]
+        return jsonify({'success': True, 'opcoes': opcoes})
+    except ValueError as ve:
+        return jsonify({'success': False, 'message': str(ve)}), 400
+    except Exception as e:
+        print(f"ERRO INESPERADO: {e}")
+        return jsonify({'success': False, 'message': f'Ocorreu um erro interno no servidor: {e}'}), 500
 
 
 # --- INICIALIZA BANCO ---
@@ -524,5 +553,6 @@ except Exception as e:
 # --- EXECUÇÃO LOCAL ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    # Desative o modo debug em produção
     app.run(host="0.0.0.0", port=port, debug=True)
+
+    if __name__ == "__main__":
