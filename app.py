@@ -365,7 +365,7 @@ def adicionar_usuario():
 @admin_required
 def remover_usuario(id):
     if id == current_user.id:
-        flash("Você не pode remover a si mesmo.", "danger")
+        flash("Você não pode remover a si mesmo.", "danger")
         return redirect(url_for('gerenciar_usuarios'))
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -390,13 +390,9 @@ def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
 
     prof_map = {}
     for prof in todos_professores:
-        cursor.execute("INSERT INTO professores (nome) VALUES (%s) ON CONFLICT (nome) DO NOTHING RETURNING id, nome;", (prof,))
-        res = cursor.fetchone()
-        if res:
-            prof_map[prof] = res['id']
-        else: # Se o professor já existia, pega o ID dele
-            cursor.execute("SELECT id FROM professores WHERE nome = %s;", (prof,))
-            prof_map[prof] = cursor.fetchone()['id']
+        cursor.execute("INSERT INTO professores (nome) VALUES (%s) ON CONFLICT (nome) DO UPDATE SET nome=EXCLUDED.nome RETURNING id;", (prof,))
+        prof_id = cursor.fetchone()['id']
+        prof_map[prof] = prof_id
 
     for _, row in df_disciplinas.iterrows():
         prof_id = prof_map.get(row['professor'])
@@ -422,12 +418,16 @@ def limpar_e_popular_banco(df_disponibilidade, df_disciplinas):
 
 def processar_planilha_disciplinas(caminho_arquivo):
     try:
-        df = pd.read_excel(caminho_arquivo, sheet_name='Planilha1', header=3)
+        # CORREÇÃO 2: Remove a exigência da aba "Planilha1" e lê a primeira por padrão.
+        df = pd.read_excel(caminho_arquivo, header=3) 
+        
+        # Renomeia as colunas de forma mais segura
         df.rename(columns={
-            'Componente': 'disciplina',
-            'HA': 'aulas_semanais',
-            'Professor Titular': 'professor'
+            df.columns[0]: 'disciplina',      # Assume que a primeira coluna é 'Componente'
+            df.columns[1]: 'aulas_semanais',  # Assume que a segunda coluna é 'HA'
+            df.columns[2]: 'professor'       # Assume que a terceira coluna é 'Professor Titular'
         }, inplace=True)
+
         df = df[['disciplina', 'aulas_semanais', 'professor']].copy()
         df.dropna(subset=['disciplina', 'professor'], inplace=True)
         df['aulas_semanais'] = pd.to_numeric(df['aulas_semanais'], errors='coerce')
@@ -441,11 +441,17 @@ def processar_planilha_disciplinas(caminho_arquivo):
 def processar_planilha_disponibilidade(caminho_arquivo):
     try:
         df = pd.read_excel(caminho_arquivo)
-        df_melted = df.melt(id_vars=['Professor'], 
-                            value_vars=['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'],
+        
+        # CORREÇÃO 1: Torna a leitura de colunas flexível
+        coluna_professor = df.columns[0] # Pega o nome da primeira coluna (ex: "Professor")
+        colunas_dias = df.columns[1:]    # Pega o nome das colunas restantes (ex: "Segunda", "Terça", etc)
+
+        df_melted = df.melt(id_vars=[coluna_professor], 
+                            value_vars=colunas_dias,
                             var_name='dia_semana', 
                             value_name='periodos_disponiveis')
-        df_melted.rename(columns={'Professor': 'professor'}, inplace=True)
+        
+        df_melted.rename(columns={coluna_professor: 'professor'}, inplace=True)
         
         df_final = []
         for _, row in df_melted.iterrows():
@@ -465,7 +471,7 @@ def processar_planilha_disponibilidade(caminho_arquivo):
         return None
 
 
-@app.route('/upload_e_processar', methods=['POST']) # Rota corrigida para corresponder ao HTML
+@app.route('/upload_e_processar', methods=['POST'])
 @login_required
 def upload_e_processar():
     if 'arquivoDisponibilidade' not in request.files or 'arquivoQuadroAulas' not in request.files:
@@ -480,8 +486,12 @@ def upload_e_processar():
         return redirect(url_for('dashboard'))
 
     if arquivo_disp and arquivo_quadro:
-        caminho_disp = os.path.join('/tmp', 'temp_disponibilidade.xlsx')
-        caminho_quadro = os.path.join('/tmp', 'temp_quadro_aulas.xlsx')
+        # Cria um diretório temporário seguro se não existir
+        tmp_dir = '/tmp/app_uploads'
+        os.makedirs(tmp_dir, exist_ok=True)
+        
+        caminho_disp = os.path.join(tmp_dir, 'temp_disponibilidade.xlsx')
+        caminho_quadro = os.path.join(tmp_dir, 'temp_quadro_aulas.xlsx')
         arquivo_disp.save(caminho_disp)
         arquivo_quadro.save(caminho_quadro)
 
@@ -514,4 +524,5 @@ except Exception as e:
 # --- EXECUÇÃO LOCAL ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    # Desative o modo debug em produção
     app.run(host="0.0.0.0", port=port, debug=True)
